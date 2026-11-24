@@ -1,6 +1,22 @@
 import os
 import sys
 import time
+
+# --- IMPORTANT (Windows): preload the local Whisper model BEFORE importing PyQt5 ---
+# Once Qt's native DLLs are loaded into the process, constructing the ctranslate2
+# model segfaults (a native OpenMP/DLL conflict between PyQt5 and ctranslate2).
+# Building the model first, before any PyQt5 import, avoids the crash.
+from utils import ConfigManager
+from transcription import create_local_model
+ConfigManager.initialize()
+_PRELOADED_LOCAL_MODEL = None
+try:
+    _mo = ConfigManager.get_config_section('model_options')
+    if ConfigManager.config_file_exists() and not _mo.get('use_api'):
+        _PRELOADED_LOCAL_MODEL = create_local_model()
+except Exception as _e:
+    print(f'Local model preload failed (will retry later): {_e}')
+
 from audioplayer import AudioPlayer
 from pynput.keyboard import Controller
 from PyQt5.QtCore import QObject, QProcess
@@ -12,9 +28,7 @@ from result_thread import ResultThread
 from ui.main_window import MainWindow
 from ui.settings_window import SettingsWindow
 from ui.status_window import StatusWindow
-from transcription import create_local_model
 from input_simulation import InputSimulator
-from utils import ConfigManager
 
 
 class WhisperWriterApp(QObject):
@@ -50,7 +64,14 @@ class WhisperWriterApp(QObject):
 
         model_options = ConfigManager.get_config_section('model_options')
         model_path = model_options.get('local', {}).get('model_path')
-        self.local_model = create_local_model() if not model_options.get('use_api') else None
+        # Reuse the model preloaded before PyQt5 (see top of file). Only build a
+        # new one here if it wasn't preloaded (e.g. first run without a config).
+        if _PRELOADED_LOCAL_MODEL is not None:
+            self.local_model = _PRELOADED_LOCAL_MODEL
+        elif not model_options.get('use_api'):
+            self.local_model = create_local_model()
+        else:
+            self.local_model = None
 
         self.result_thread = None
 
