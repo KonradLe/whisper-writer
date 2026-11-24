@@ -1,3 +1,66 @@
+> [!NOTE]
+> **This is a fork of [savbell/whisper-writer](https://github.com/savbell/whisper-writer)**
+> with a fix for Windows, a requirements file for Python 3.13 and two launchers.
+> The original README continues below the line. Opis po polsku: [README.pl.md](README.pl.md)
+
+## What this fork changes
+
+Changes by KonradLe, 2026, licensed under GPL-3.0 like the original:
+
+1. **Fix: the app silently never starts on Windows** (2026-07-15, `src/main.py`).
+   Creating the local faster-whisper (CTranslate2) model *after* PyQt5 has been loaded
+   crashes the process with a segfault (exit code 139), and under `pythonw` nothing is
+   printed. It is a clash between the native libraries of Qt and CTranslate2;
+   `KMP_DUPLICATE_LIB_OK` does not help. `main.py` now builds the local model at the very
+   top, before any PyQt5 import, and reuses it later. Nothing changes when you use the
+   API instead of a local model.
+2. **Python 3.13** (`requirements-py313.txt`). The original `requirements.txt` pins 2024
+   versions (numpy 1.24, numba, llvmlite and others) that do not build on Python 3.13.
+   This file is the exact set that works for us: Windows 10, Python 3.13.3, CPU only.
+3. **Windows launchers.** `WhisperWriter.bat` starts the app without a console window;
+   `WhisperWriter-debug.bat` keeps the console open, so you can see errors and the model
+   download. Both switch to the app folder first, because WhisperWriter finds its
+   configuration through relative paths.
+
+### Install on Windows with Python 3.13
+
+```bat
+git clone https://github.com/KonradLe/whisper-writer
+cd whisper-writer
+py -3.13 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-py313.txt
+WhisperWriter-debug.bat
+```
+
+On the first start the settings window opens. For offline transcription keep the local
+model and set the model (`base` is fast, `small` understands languages such as Polish
+better), `device: cpu`, `compute_type: int8` and your language. After you save, the app
+restarts by itself. Click **Start** and it hides to the tray. Press the shortcut
+(`ctrl+shift+space` by default), speak, and the text is typed into the active window.
+We use the `press_to_toggle` mode: the first press starts recording, the second one
+stops it. From then on, start the app with `WhisperWriter.bat`.
+
+### Tips from our setup
+
+- **Pin your microphone by name.** With an empty `sound_device`, WhisperWriter records
+  from the Windows default input. When we plugged in an HDMI capture card, Windows made
+  it the default input without asking. WhisperWriter then recorded digital silence, and
+  Whisper turned the silence into repeated, made-up sentences. Put part of your
+  microphone's name in `sound_device` (in the settings window or in `src/config.yaml`).
+  sounddevice matches it as a substring, so make it specific enough to match only the
+  input: a bare brand name also matched outputs for us and the app reported an error.
+  `.venv\Scripts\python -m sounddevice` lists the devices.
+- **Use the MME variant of the device.** WhisperWriter records at 16 kHz, and the WASAPI
+  variant of the same microphone may refuse that rate (`Invalid sample rate -9997`).
+- **Four Python processes for one running app are normal on Windows:** `run.py` starts
+  `main.py` as a separate process, and each Python from a venv is a small launcher plus
+  the real interpreter.
+
+The whole setup is described (in Polish) in
+[Jak pisać głosem na komputerze](https://zautomatyzowani.ai/faq/pisanie-glosem-na-komputerze/).
+
+---
+
 # <img src="./assets/ww-logo.png" alt="WhisperWriter icon" width="25" height="25"> WhisperWriter
 
 ![version](https://img.shields.io/badge/version-1.0.1-blue)
